@@ -1,1 +1,1 @@
-# greenify
+# Greenify: Cleaner Footprint Using AI
