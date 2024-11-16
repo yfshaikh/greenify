@@ -24,10 +24,10 @@ Greenify is an innovative platform designed to help property managers and organi
 
 ## **Technical Stack**
 
-- **Frontend**: Modern, responsive UI for dashboards and user interactions.
-- **Backend**: LLM-powered chatbot and robust analytics engine.
-- **Deployment**: Deployed on **Terraform** for scalability and reliability.
-- **Analytics**: Integrated with **Google Analytics** to track usage and performance metrics.
+- **Frontend**:
+- **Backend**:
+- **Deployment**:
+- **Analytics**: 
 
 ---
 
