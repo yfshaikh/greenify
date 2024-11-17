@@ -8,127 +8,110 @@ from dotenv import load_dotenv
 import os
 from langchain_community.embeddings import OpenAIEmbeddings
 from langchain import OpenAI
-from sklearn.decomposition import PCA
-import numpy as np
-from transformers import pipeline
 
 
 
-
-
-class RAG:
+class RAG():
     def __init__(self, company, model):
+        # Load environment variables
         load_dotenv()
-        self.llm = OpenAI(temperature=0.9, max_tokens=500)
-        # self.embeddings = OpenAIEmbeddings()
-        self.embeddings = HuggingFaceEmbeddings(model_name="msmarco-bert-base-dot-v5")
-        self.pca = PCA(n_components=768)
+
+        # Set up embeddings using HuggingFace model
+        self.embeddings = OpenAIEmbeddings()
+        
+        # Pinecone setup
+        # Create a Pinecone instance 
         pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"), environment="us-east-1")
         
+        # Ensure the index exists or create it
         index_name = "company-key-data"
         if index_name not in pc.list_indexes().names():
             pc.create_index(
                 name=index_name,
-                dimension=768,
+                dimension=1536,  # The dimensionality of the embeddings
                 metric="cosine",
-                spec=ServerlessSpec(cloud="aws", region="us-east-1")
+                spec=ServerlessSpec(cloud="aws", region="us-east-1")  # Modify this to fit your region and cloud
             )
+        
+        # Connect to the index
         self.index = pc.Index(index_name)
-        self.retriever = self.index.query
+
+        self.retriever = self.index.query  # Use the query method for retrieval
+
         self.model = model
+        self.llm = OpenAI(temperature=0.8, max_tokens=500)
         self.company = company
 
-        # Initialize the summarizer using Hugging Face's pipeline
-        self.summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+        # Custom prompt template tailored for CBRE sustainability
+        template = """
+        <s>[INST] Focus solely on CBRE's goals, critically analyzing the provided context to identify gaps, missed opportunities, or areas where progress is lagging. Highlight specific metrics or initiatives that need improvement and suggest actionable steps to accelerate progress. Include relevant statistics when available and avoid excessive praise.  
+        Respond clearly and concisely, using no more than 3 sentences. Avoid filler or speculation beyond the given context. Do not number your sentences. Avoid repeating the same concept in different phrasing. If asked a follow-up question ("e.g., Tell me more, or What's next"), avoid repeating the previous answer and provide fresh insights. 
+        Do NOT include prefixes such as 'Agent' or 'Response' in your response. You should respond like a human. Do NOT praise CBRE excessively. Focus on constructive critiscm. Limit your response to three sentences[/INST]
 
-        self.conversation_history = ""
-    
-    def update_history(self, question, answer):
-        self.conversation_history += f"Representative: {question}\nAgent: {answer}\n"
-        history_parts = self.conversation_history.split("\n")
-        if len(history_parts) > 6:  # Limiting history to 3 exchanges (6 lines)
-            self.conversation_history = "\n".join(history_parts[-6:])
-    
-    def get_response(self, input_query, user_prompt):
-        # Perform a Pinecone query to retrieve the closest matches
-        results = self.retriever(
-            vector=input_query,
-            top_k=5,
-            include_values=True,
-            include_metadata=True
-        )
-        
-        # Summarize or filter context
-        context = self.retrieve_context(user_prompt)
-        print("Context retrieved:", context)  # Debugging context
-        context = self.summarize_context(context)
-        print("Context after summarization:", context)  # Debugging context after summarization
-
-        # Build the entire prompt as a single string
-        prompt = f"""
-        <s>[INST] You are an agent speaking with a representative from {self.company}.  
-        Your goal is to assist the representative with questions regarding {self.company}'s sustainability practices.  
-        You are provided with context on {self.company}’s sustainability goals. Focus only on {self.company}’s practices and avoid discussing other companies. Be critical by identifying any missing metrics or areas for improvement, and provide specific, actionable suggestions.  
-        Answer the question with a concise, focused response. Split your response into clear, logical paragraphs to improve readability. Use only the provided context to inform your answer. Don't give more than 3 sentences before a line break [/INST]
 
         Context: {context}
 
         Conversation History:
-        {self.conversation_history}
+        {history}
 
-        Representative: {user_prompt} [/INST]
+        Representative: {question} [/INST]
         """
+
+        self.prompt = ChatPromptTemplate.from_template(template)
+
+        # Initialize conversation history
+        self.conversation_history = ""
+    
+    def update_history(self, question, answer):
+        self.conversation_history += f"Question: {question}\nAnswer: {answer}\n"
+
+    def get_response(self, input_query, user_prompt):
+        # Perform a Pinecone query with the correct top_k parameter
+        results = self.retriever(
+            vector=input_query,  # Pass the query vector (ensure input_query is the vector)
+            top_k=5,  # Specify the number of similar results to retrieve
+            include_values=True,  # Optionally include vector values
+            include_metadata=True  # Optionally include metadata
+        )
         
-        output = self.llm(prompt)
+        # Extract and format the context from Pinecone results using metadata fields
+        context = []
+        for match in results.get('matches', []):  # Safeguard if 'matches' is not present
+            metadata = match.get('metadata', {})
+            
+            # Get relevant metadata fields
+            description = metadata.get('description', 'No description available.')
+            value = metadata.get('value', 'N/A')
+            tags = metadata.get('tags', [])
+            
+            # Format the context for this particular match
+            match_context = f"{description}. Value: {value}. Tags: {', '.join(tags)}."
+            context.append(match_context)
         
-        # Update history
+        # Combine context into a single string or provide a fallback message
+        context_str = " ".join(context) if context else "No relevant context found."
+        
+        # Construct a single prompt with all necessary information
+        prompt = (
+            f"Context: {context_str}\n\n"
+            f"Conversation History: {self.conversation_history}\n\n"
+            f"Company: {self.company}\n\n"
+            f"Question: {user_prompt}\n\n"
+            "Based on the above information, provide a response."
+        )
+        
+        # Pass the prompt to the model and get the output
+        try:
+            output = self.llm(prompt)
+        except Exception as e:
+            output = f"An error occurred while generating the response: {e}"
+        
+        # Update the conversation history
         self.update_history(user_prompt, output)
         
-        return output
-    
-    
-    def retrieve_context(self, query):
-        # Convert the query into an embedding vector
-        query_vector = self.embeddings.embed_query(query)
-        
-        # Convert the query vector to a NumPy array (if it's not already)
-        query_vector = np.array(query_vector)
-        
-        # Flatten the query vector
-        query_vector = query_vector.flatten()
+        return output  # Return the generated response
 
-        # Convert the NumPy array to a list for Pinecone serialization
-        query_vector_list = query_vector.tolist()
 
-        # Perform a Pinecone query to retrieve relevant documents
-        results = self.retriever(
-            vector=query_vector_list,  # The embedding vector of the query (as a list)
-            top_k=5,  # Number of similar results to fetch
-            include_values=True,  # Optionally include the vector values
-            include_metadata=True  # Optionally include metadata associated with the results
-        )
-
-        # Debugging: print the entire result to inspect the metadata
-        print("Pinecone results:", results)
-
-        # Extract the top relevant results (assuming you have metadata or text to return)
-        context = ""
-        for result in results['matches']:
-            # Debugging: print the metadata structure
-            print(f"Metadata for result: {result['metadata']}")
-            
-            # Concatenate relevant fields from metadata to build context
-            description = result['metadata'].get('description', 'No description available')
-            company = result['metadata'].get('company', 'No company available')
-            tags = ", ".join(result['metadata'].get('tags', ['No tags available']))
-            
-            # Combine the extracted fields into a coherent context
-            text = f"Company: {company}\nDescription: {description}\nTags: {tags}\n"
-            print(f"Retrieved context: {text}")  # Debugging the context
-            context += text + "\n"
-        
-        print("Final context before returning:", context)  # Debugging final context
-        return context
 
     def chat_interface(self):
         while True:
@@ -136,15 +119,6 @@ class RAG:
             if user == "stop":
                 break
             print(self.get_response(user))
-
-    def summarize_context(self, context):
-        if len(context) > 500:  # If context is long, summarize it
-            # Use a transformer-based model for summarization (e.g., BART, T5)
-            summary = self.summarizer(context, max_length=150, min_length=50, do_sample=False)
-            return summary[0]['summary_text']
-        else:
-            # If the context is short, return it as is
-            return context
 
 if __name__ == "__main__":
     company = "CBRE"

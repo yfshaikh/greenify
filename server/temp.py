@@ -6,102 +6,107 @@ from langchain_together import Together
 from pinecone import Pinecone, ServerlessSpec
 from dotenv import load_dotenv
 import os
+from langchain_community.embeddings import OpenAIEmbeddings
+from langchain import OpenAI
+from sklearn.decomposition import PCA
+import numpy as np
+from transformers import pipeline
 
-class RAG():
+
+class RAG:
     def __init__(self, company, model):
-        # Load environment variables
         load_dotenv()
-
-        # Set up embeddings using HuggingFace model
-        self.embeddings = HuggingFaceEmbeddings(model_name="msmarco-bert-base-dot-v5")
-        
-        # Pinecone setup
-        # Create a Pinecone instance 
+        self.llm = OpenAI(temperature=0.8, max_tokens=500)
+        self.embeddings = OpenAIEmbeddings()
+        self.pca = PCA(n_components=1536)
         pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"), environment="us-east-1")
         
-        # Ensure the index exists or create it
         index_name = "company-key-data"
         if index_name not in pc.list_indexes().names():
             pc.create_index(
                 name=index_name,
-                dimension=768,  # The dimensionality of the embeddings
+                dimension=1536,
                 metric="cosine",
-                spec=ServerlessSpec(cloud="aws", region="us-east-1")  # Modify this to fit your region and cloud
+                spec=ServerlessSpec(cloud="aws", region="us-east-1")
             )
-        
-        # Connect to the index
         self.index = pc.Index(index_name)
-
-        self.retriever = self.index.query  # Use the query method for retrieval
-
+        self.retriever = self.index.query
         self.model = model
         self.company = company
-
-        # Custom prompt template tailored for CBRE sustainability
-        template = """
-        <s>[INST] You are an agent speaking with a representative from CBRE.  
-        Your goal is to assist the representative with questions regarding CBRE's sustainability practices.  
-        You are provided with context on CBRE’s sustainability goals. Focus only on CBRE’s practices and avoid discussing other companies. Be critical by identifying any missing metrics or areas for improvement, and provide specific, actionable suggestions.  
-        Answer the question with a concise, focused response. Split your response into clear, logical paragraphs to improve readability. Use only the provided context to inform your answer. Don't give more than 3 sentences before a line break [/INST]
-
-
-        Context: {context}
-
-        Conversation History:
-        {history}
-
-        Representative: {question} [/INST]
-
-        """
-        self.prompt = ChatPromptTemplate.from_template(template)
-
-        # Initialize conversation history
         self.conversation_history = ""
     
     def update_history(self, question, answer):
         self.conversation_history += f"Representative: {question}\nAgent: {answer}\n"
-
-    def get_response(self, input_query, user_prompt):
-        # Perform a Pinecone query with the correct top_k parameter
-        results = self.retriever(
-            vector=input_query,  # Pass the query vector (ensure input_query is the vector)
-            top_k=5,  # Specify the number of similar results to retrieve
-            include_values=True,  # Optionally include vector values
-            include_metadata=True  # Optionally include metadata
-        )
-        
+        history_parts = self.conversation_history.split("\n")
+        if len(history_parts) > 6:  # Limiting history to 3 exchanges (6 lines)
+            self.conversation_history = "\n".join(history_parts[-6:])
     
+    def get_response(self, input_query, user_prompt):
+        # Perform a Pinecone query to retrieve the closest matches
+        context = self.retrieve_context(user_prompt)
+        print('Retrieved Context:', context)  # Debugging context
         
-        # Prepare chain input as a dictionary
-        chain_input = {
-            "history": lambda x: self.conversation_history,  # Assuming conversation_history is a string or similar format
-            "company": lambda x: self.company,  # CBRE, as per your requirement
-            "question": RunnablePassthrough()  # Original user question
-        }
+        # Build the entire prompt as a single string
+        prompt = f"""
+        You are an assistant helping a representative from {self.company} with questions about its sustainability practices.  
+        Below is the context about {self.company}'s goals:
+
+        {context}
+
+        Focus solely on {self.company}’s goals, critically analyzing the provided context to identify missing metrics, improvement areas, or opportunities for progress. Include actionable suggestions and relevant statistics when applicable.  
+        Respond clearly and concisely, using no more than 3 sentences. Avoid filler or speculation beyond the given context.
+
+        """
         
-        # Define the chain with structured input
-        chain = (
-            chain_input  # Pass the structured input
-            | self.prompt
-            | self.model
-            | StrOutputParser()
-        )
+        output = self.llm(prompt)
+        print('=============================================')
+        print(context)
         
-        # Invoke the chain and get the response
-        output = chain.invoke(chain_input)  # Pass chain_input, which is a dictionary
-        
-        # Update the conversation history
+        # Update history
         self.update_history(user_prompt, output)
         
-        return output  # Only return the final output
+        return output
+    
+    def retrieve_context(self, query):
+        # Convert the query into an embedding vector
+        query_vector = self.embeddings.embed_query(query)
+        
+        query_vector = query_vector.tolist()
 
+        # Perform a Pinecone query to retrieve relevant documents
+        results = self.retriever(
+            vector=query_vector,  # The embedding vector of the query (as a list)
+            top_k=5,  # Number of similar results to fetch
+            include_values=True,  # Optionally include the vector values
+            include_metadata=True  # Optionally include metadata associated with the results
+        )
+
+        # Concatenate all relevant results into a single string
+        context = ""
+        for result in results['matches']:
+            description = result['metadata'].get('description', 'No description available')
+            company = result['metadata'].get('company', 'No company available')
+            tags = ", ".join(result['metadata'].get('tags', ['No tags available']))
+            
+            # Combine the extracted fields into a coherent context
+            text = f"Description: {description}\nTags: {tags}\n"
+            context += text + "\n"
+        
+        # Handle edge cases with no results
+        if not context.strip():
+            context = "No relevant context found for the given query."
+        
+        return context
 
     def chat_interface(self):
         while True:
             user = input(">>> ")
             if user == "stop":
                 break
-            print(self.get_response(user))
+            response = self.get_response(user, user)
+            print(response)
+
+
 
 if __name__ == "__main__":
     company = "CBRE"

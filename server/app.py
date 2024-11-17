@@ -18,8 +18,8 @@ load_dotenv()
 
 # initialize LLM and embeddings
 llm = OpenAI(temperature=0.9, max_tokens=500)
-# embeddings = OpenAIEmbeddings()
-embeddings = HuggingFaceEmbeddings(model_name="msmarco-bert-base-dot-v5")
+embeddings = OpenAIEmbeddings()
+# embeddings = HuggingFaceEmbeddings(model_name="msmarco-bert-base-dot-v5")
 
 # Create a Pinecone instance 
 pc = Pinecone(
@@ -49,7 +49,7 @@ try:
         # Create a new index if it doesn't exist
         index = pc.create_index(
             name=index_name,
-            dimension=768,
+            dimension=1536,
             metric="cosine",
             spec=ServerlessSpec(
                 cloud='aws',
@@ -98,7 +98,7 @@ def get_closest_feature_from_pinecone(query, topic):
 
 def generate_follow_up_questions(context):
     prompt = f"""
-    <s>[INST] You are an agent speaking with a representative from CBRE.
+    You are an agent speaking with a representative from CBRE.
     Your goal is to assist the representative to help them better understand tenant building emissions and sustainability practices.
     
     You provide follow-up questions that the representative may ask.
@@ -116,7 +116,6 @@ def generate_follow_up_questions(context):
     ```
     {context}
     ```
-    [/INST]
     """
     
     result = None
@@ -144,6 +143,9 @@ def get_cbre_info_in_format():
 def chat_with_bot():
     data = request.json
     user_prompt = data.get('prompt')
+    print('===========================')
+    print(user_prompt)
+    print('===========================')
 
     # Ensure a prompt is provided
     if not user_prompt:
@@ -154,6 +156,10 @@ def chat_with_bot():
 
     # Get response from RAG instance using the query_embedding
     response = rag_instance.get_response(query_embedding, user_prompt)
+
+    print('===========================')
+    print(response)
+    print('===========================')
 
     # Return the chatbot's response
     return jsonify({"response": response})
