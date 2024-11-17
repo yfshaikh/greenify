@@ -1,3 +1,22 @@
+venv/
+env/
+flask-env/
+*.env
+
+pycache/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+pip-wheel-metadata/
+*.whl
+*.egg-info
+dist/
+build/
+
+Pipfile.lock
+poetry.lock
 # Python Virtual Environments
 venv/
 env/
