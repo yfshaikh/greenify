@@ -39,10 +39,11 @@ class RAG():
 
         # Custom prompt template tailored for CBRE sustainability
         template = """
-        <s>[INST] You are an agent speaking with a representative from CBRE.
-        Your goal is to assist the representative with questions regarding CBRE's sustainability practices.
-        You are provided with context on CBRE’s sustainability goals. Focus only on CBRE’s practices and avoid discussing other companies. Be critical by identifying any missing metrics or areas for improvement, and provide specific, actionable suggestions.
-        Answer the question with a concise, focused response, incorporating only the provided context. 
+        <s>[INST] You are an agent speaking with a representative from CBRE.  
+        Your goal is to assist the representative with questions regarding CBRE's sustainability practices.  
+        You are provided with context on CBRE’s sustainability goals. Focus only on CBRE’s practices and avoid discussing other companies. Be critical by identifying any missing metrics or areas for improvement, and provide specific, actionable suggestions.  
+        Answer the question with a concise, focused response. Split your response into clear, logical paragraphs to improve readability. Use only the provided context to inform your answer. Don't give more than 3 sentences before a line break [/INST]
+
 
         Context: {context}
 
@@ -71,44 +72,28 @@ class RAG():
         
         # Extract and format the context from Pinecone results using metadata fields
         context = ""
-        sources = []  # List to store information about the sources (IDs)
-        
         for match in results['matches']:
             metadata = match['metadata']
             
-            # Get relevant metadata fields (e.g., description, value, tags, id)
+            # Get relevant metadata fields
             description = metadata.get('description', '')
             value = metadata.get('value', '')
             tags = metadata.get('tags', [])
-            source_id = metadata.get('id', 'Unknown ID')  # Get the ID of the source
             
             # Format the context for this particular match
-            match_context = f"Source ID: {source_id} | Description: {description} | Value: {value} | Tags: {', '.join(tags)}."
+            match_context = f"{description}. Value: {value}. Tags: {', '.join(tags)}."
             context += match_context + " "  # Add this match's context to the overall context
-            
-            # Add the source info to the sources list (if you want to display all sources separately)
-            sources.append(f"Source ID: {source_id}, Description: {description}, Value: {value}, Tags: {', '.join(tags)}")
         
         # If no context was found, provide a fallback message
         if not context:
             context = "No relevant context found."
-
-        # Prepare the thought process
-        thought_process = (
-            "The context has been gathered from the most relevant matches in the knowledge base. "
-            "Each source provides specific data that can inform the response. Here's how I arrived at the answer:\n\n"
-            f"Context: {context}\n\n"
-            "I will now combine the provided information to give you a detailed response."
-        )
-
+        
         # Prepare chain input as a dictionary
         chain_input = {
             "context": lambda x: context,  # Use concatenated context as a single string
             "history": lambda x: self.conversation_history,  # Assuming conversation_history is a string or similar format
             "company": lambda x: self.company,  # CBRE, as per your requirement
-            "question": RunnablePassthrough(),  # Original user question
-            "sources": lambda x: "\n".join(sources),  # Return the sources list as a string for display
-            "thought_process": lambda x: thought_process  # Return the thought process
+            "question": RunnablePassthrough()  # Original user question
         }
         
         # Define the chain with structured input
@@ -122,17 +107,10 @@ class RAG():
         # Invoke the chain and get the response
         output = chain.invoke(chain_input)  # Pass chain_input, which is a dictionary
         
-        # Combine the output with context, sources, and thought process
-        full_response = (
-            f"Thought Process:\n{thought_process}\n\n"
-            f"Sources:\n{context}\n\n"
-            f"Answer:\n{output}"
-        )
-        
         # Update the conversation history
         self.update_history(user_prompt, output)
         
-        return full_response
+        return output  # Only return the final output
 
 
     def chat_interface(self):
