@@ -2,6 +2,7 @@
 venv/
 env/
 *.env
+flask-env/
 
 # Ignore pip cache
 __pycache__/
