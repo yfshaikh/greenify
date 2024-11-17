@@ -4,7 +4,7 @@ langchain-together
 monsterapi==1.0.2b3
 pinecone
 predictionguard
-pydantic<2
+pydantic
 pymongo
 pypdf2
 python-dotenv
