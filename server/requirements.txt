@@ -9,3 +9,6 @@ pymongo
 pypdf2
 python-dotenv
 spacy
+flask
+flask_cors
+langchain_community
