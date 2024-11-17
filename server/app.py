@@ -7,12 +7,18 @@ from pymongo import MongoClient
 import pinecone
 from pinecone import Pinecone, ServerlessSpec
 from langchain_together import Together
+from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain import OpenAI
 import json
 
 # Load environment variables
 load_dotenv()
 
+
+# initialize LLM and embeddings
+llm = OpenAI(temperature=0.9, max_tokens=500)
+# embeddings = OpenAIEmbeddings()
 embeddings = HuggingFaceEmbeddings(model_name="msmarco-bert-base-dot-v5")
 
 # Create a Pinecone instance 
@@ -47,7 +53,7 @@ try:
             metric="cosine",
             spec=ServerlessSpec(
                 cloud='aws',
-                region='us-west-2'
+                region='us-east-1'
             )
         )
 except Exception as e:

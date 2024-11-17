@@ -9,3 +9,5 @@ pymongo
 pypdf2
 python-dotenv
 spacy
+openai
+scikit-learn
