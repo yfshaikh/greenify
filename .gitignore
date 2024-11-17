@@ -1,0 +1,25 @@
+# Python Virtual Environments
+venv/
+env/
+flask-env/
+*.env
+.env
+
+# Compiled Python Files
+pycache/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Pip Wheel Metadata
+pip-wheel-metadata/
+*.whl
+*.egg-info
+*.dist-info/
+dist/
+build/
+
+# Pipfile Lock
+Pipfile.lock
+poetry.lock
