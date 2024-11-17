@@ -11,3 +11,6 @@ python-dotenv
 spacy
 openai
 scikit-learn
+flask
+flask_cors
+langchain_community
