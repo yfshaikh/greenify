@@ -46,7 +46,7 @@ class RAG():
         template = """
         <s>[INST] Focus solely on CBRE's goals, critically analyzing the provided context to identify gaps, missed opportunities, or areas where progress is lagging. Highlight specific metrics or initiatives that need improvement and suggest actionable steps to accelerate progress. Include relevant statistics when available and avoid excessive praise.  
         Respond clearly and concisely, using no more than 3 sentences. Avoid filler or speculation beyond the given context. Do not number your sentences. Avoid repeating the same concept in different phrasing. If asked a follow-up question ("e.g., Tell me more, or What's next"), avoid repeating the previous answer and provide fresh insights. 
-        Do NOT include prefixes such as 'Agent' or 'Response' in your response. You should respond like a human. Do NOT praise CBRE excessively. Focus on constructive critiscm. Limit your response to three sentences[/INST]
+        Do NOT include prefixes such as 'Agent', 'Response', 'Answer', or any other prefix in your response. You should respond like a human. Do NOT praise CBRE excessively. Focus on constructive critiscm. Limit your response to three sentences[/INST]
 
 
         Context: {context}
