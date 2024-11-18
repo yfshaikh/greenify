@@ -19,7 +19,6 @@ load_dotenv()
 # initialize LLM and embeddings
 llm = OpenAI(temperature=0.9, max_tokens=500)
 embeddings = OpenAIEmbeddings()
-# embeddings = HuggingFaceEmbeddings(model_name="msmarco-bert-base-dot-v5")
 
 # Create a Pinecone instance 
 pc = Pinecone(
@@ -59,14 +58,8 @@ try:
 except Exception as e:
     print(f"Error: {e}")
 
-# Initialize the RAG model
-model = Together(
-    model="mistralai/Mixtral-8x7B-Instruct-v0.1",
-    temperature=0.7,
-    max_tokens=1024,
-    top_k=50,
-)
-rag_instance = RAG("CBRE", model)
+
+rag_instance = RAG("CBRE")
 
 def get_metrics_from_mongo(topic, phrase):
     # Query MongoDB for sustainability metrics related to topic and phrase

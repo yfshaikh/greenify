@@ -12,7 +12,7 @@ from langchain import OpenAI
 
 
 class RAG():
-    def __init__(self, company, model):
+    def __init__(self, company):
         # Load environment variables
         load_dotenv()
 
@@ -38,7 +38,6 @@ class RAG():
 
         self.retriever = self.index.query  # Use the query method for retrieval
 
-        self.model = model
         self.llm = OpenAI(temperature=0.8, max_tokens=500)
         self.company = company
 
@@ -123,15 +122,8 @@ class RAG():
 if __name__ == "__main__":
     company = "CBRE"
     load_dotenv()
-    
-    # Initialize the model
-    model = Together(
-        model="mistralai/Mixtral-8x7B-Instruct-v0.1",
-        temperature=0.7,
-        max_tokens=1024,
-        top_k=50,
-    )
+
     
     # Create an instance of the RAG class
-    r = RAG(company, model)
+    r = RAG(company)
     r.chat_interface()
